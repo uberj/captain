@@ -20,3 +20,10 @@ tmp/*
 media/*
 venv/*
 captain.db
+shove/
+.pip_cache/
+.librarian/
+.tmp/
+.vagrant/
+Puppetfile.lock
+puppet/modules/
