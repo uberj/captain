@@ -19,6 +19,26 @@ else
 fi
 SCRIPT
 
+$start_captain = <<SCRIPT
+set -x
+sudo -u vagrant screen -ls | grep captain
+if [ $? -eq 1 ]; then
+    echo "Starting new captain screen session..."
+    cd /vagrant
+    sudo -u vagrant screen -dmS captain sh -c 'python manage.py runserver 0.0.0.0:8000; exec bash'
+fi
+SCRIPT
+
+$start_shove = <<SCRIPT
+set -x
+sudo -u vagrant screen -ls | grep shove
+if [ $? -eq 1 ]; then
+    echo "Starting new shove screen session..."
+    cd /vagrant
+    sudo -u vagrant screen -dmS shove sh -c 'shove; exec bash'
+fi
+SCRIPT
+
 VAGRANTFILE_API_VERSION = "2"
 
 Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
@@ -46,6 +66,7 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
         puppet.module_path = module_path
         puppet.manifest_file = manifest_file
     end
+    conf.vm.provision "shell", inline: $start_captain
   end
 
   config.vm.define "shove" do |conf|
@@ -60,5 +81,6 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
         puppet.module_path = module_path
         puppet.manifest_file = manifest_file
     end
+    conf.vm.provision "shell", inline: $start_shove
   end
 end
