@@ -45,7 +45,7 @@ more machines to your test environment make sure to add them to puppet!
 
 To bring up the development environment do::
 
-    vagrant up
+    vagrant up --provision
 
 On first run, puppet will install shove into a ``shove/`` directory in the
 captain project root. You can make changes to both captain and shove and have
@@ -55,3 +55,22 @@ The hosts in vagrant need to use ``"private_network"`` ("host only addresses")
 and have been assigned arbitrarily chosen private addresses. If you feel the
 need to change the addresses make sure to update the addresses in
 ``puppet/manifests/vagrant.pp``.
+
+Using The Vagrant Test Environment
+----------------------------------
+After successfully installing your test environment you will have a working
+captain/shove environment. To access captain, point your browser at
+``127.0.0.1:800``.
+
+Both the captain development server and shove daemon are running in screen
+sessions in their respective virtual machines. On login to either captain or
+shove, you will be dropped into an active screen sessions. If your
+screen sessions ever die run puppet again (i.e. ``vagrant provision``) to
+automatically restart them.  Alternatively, you can, `as the vagrant user`, run
+either::
+
+    screen -S captain python manage.py runserver 0.0.0.0:8000
+
+Or::
+
+    screen -S shove shove
