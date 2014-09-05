@@ -14,3 +14,5 @@ pushd $SCRIPT_DIR
     echo 'yes' | python manage.py collectstatic
     echo 'no' | python manage.py syncdb --migrate
 popd
+
+service apache2 restart
