@@ -116,6 +116,7 @@ resources:
 
   db_floating_ip:
     type: OS::Neutron::FloatingIP
+    depends_on: [ db_server ]
     properties:
       floating_network_id: { get_param: public_net_id }
       port_id: { get_resource: db_port }
@@ -186,6 +187,7 @@ resources:
   # Give the instance external connectivity
   web_floating_ip:
     type: OS::Neutron::FloatingIP
+    depends_on: [ web_server ]
     properties:
       floating_network_id: { get_param: public_net_id }
       port_id: { get_resource: web_port }
@@ -246,6 +248,57 @@ resources:
       server:
         get_resource: web_server
 
+  rabbit_config:
+    type: OS::Heat::SoftwareConfig
+    properties:
+      group: puppet
+      inputs:
+      - name: vhost_name
+      - name: user
+      - name: password
+      outputs:
+      - name: result
+      config: |
+        class {'rabbitmq':
+            port             => 5672,
+            package_provider => 'apt',
+            admin_enable     => true,
+            manage_repos     => false,
+            environment_variables   => {
+              # The NODENAME *must* be rabbit
+              # See http://serverfault.com/questions/562911/trying-to-install-rabbitmq-with-puppet/573909#573909
+              'RABBITMQ_NODENAME'     => 'rabbit',
+              'RABBITMQ_SERVICENAME'  => 'RabbitMQ'
+            }
+          }
+
+        rabbitmq_vhost { $::vhost_name:
+          ensure  => present,
+          require => Class['rabbitmq'],
+        }
+
+        rabbitmq_user { $::user:
+          admin    => false,
+          password => $::password,
+        }
+
+
+  # Deploy the apache configuration onto the web_server instance resource
+  rabbit_deployment:
+    type: OS::Heat::SoftwareDeployment
+    properties:
+      config:
+        get_resource: rabbit_config
+      server:
+        get_resource: db_server
+      input_values:
+        vhost_name:
+          get_attr: [app_config_deployment, rabbit_vhost_name]
+        user:
+          get_attr: [app_config_deployment, rabbit_user]
+        password:
+          get_attr: [app_config_deployment, rabbit_password]
+
   # Define the app config
   app_config:
     type: OS::Heat::SoftwareConfig
@@ -263,6 +316,11 @@ resources:
         - name: apache_install_root
         - name: apache_wsgi_path
         - name: apache_static_root
+
+        # rabbit specific data
+        - name: rabbit_vhost_name
+        - name: rabbit_user
+        - name: rabbit_password
 
         # app installation data
         - name: app_install_dir
@@ -282,6 +340,11 @@ resources:
         - name: apache_install_root
         - name: apache_wsgi_path
         - name: apache_static_root
+
+        # rabbit specific data
+        - name: rabbit_vhost_name
+        - name: rabbit_user
+        - name: rabbit_password
 
         # app installation data
         - name: app_install_dir
@@ -335,7 +398,11 @@ resources:
         apache_vhost_name: captain
         apache_install_root: /var/www/captain
         apache_wsgi_path: /var/www/captain/captain/wsgi.py
-        apache_static_root: /var/www/captain/captain/static/
+        apache_static_root: /var/www/captain/static/
+
+        rabbit_vhost_name: captain
+        rabbit_user: user
+        rabbit_password: a-very-bad-password
 
         app_install_dir: /var/www/captain
         app_git_url: https://github.com/uberj/captain.git
@@ -359,8 +426,11 @@ resources:
       - name: result
       config: |
         #!/bin/bash
+        set +x
         mkdir -p $(dirname $install_dir)
-        git clone -b $branch $git_url $install_dir
+        if [ ! -f $install_dir/.git/index ]; then
+          git clone -b $branch $git_url $install_dir
+        fi
         $install_dir/$install_script
 
 
