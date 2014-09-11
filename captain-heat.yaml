@@ -550,7 +550,7 @@ resources:
     type: OS::Heat::SoftwareDeployment
     properties:
       config:
-        get_resource: app_install
+        get_resource: app_commands
       server:
         get_resource: web_server
 
