@@ -372,6 +372,7 @@ resources:
         - name: rabbit_vhost
         - name: rabbit_user
         - name: rabbit_password
+        - name: rabbit_host
 
         # app installation data
         - name: app_install_dir
@@ -396,6 +397,7 @@ resources:
         - name: rabbit_vhost
         - name: rabbit_user
         - name: rabbit_password
+        - name: rabbit_host
 
         # app installation data
         - name: app_install_dir
@@ -427,6 +429,7 @@ resources:
         stash_config rabbit_vhost
         stash_config rabbit_user
         stash_config rabbit_password
+        stash_config rabbit_host
 
         stash_config app_install_dir
         stash_config app_git_url
@@ -458,6 +461,8 @@ resources:
         rabbit_vhost: /
         rabbit_user: shove
         rabbit_password: a-very-bad-password
+        rabbit_host:
+          get_attr: [db_server, first_address]
 
         app_install_dir: /var/www/captain
         app_git_url: https://github.com/uberj/captain.git
