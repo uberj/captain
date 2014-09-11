@@ -188,5 +188,5 @@ LOGIN_REDIRECT_URL = '/'
 LOGIN_URL = reverse_lazy('users.login')
 
 # Use secure cookies.
-SESSION_COOKIE_SECURE = True
-CSRF_COOKIE_SECURE = True
+SESSION_COOKIE_SECURE = False
+CSRF_COOKIE_SECURE = False
