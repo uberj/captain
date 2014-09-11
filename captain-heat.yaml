@@ -548,6 +548,7 @@ resources:
   # Install the application on the web_server
   app_commands_deployment:
     type: OS::Heat::SoftwareDeployment
+    depends_on: [ app_install_deployment ]
     properties:
       config:
         get_resource: app_commands
