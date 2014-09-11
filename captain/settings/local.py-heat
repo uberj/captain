@@ -23,7 +23,7 @@ DATABASES = {
 }
 
 # RabbitMQ connection settings.
-RABBITMQ_HOST = os.getenv('PROVISION_rabbit_server')
+RABBITMQ_HOST = os.getenv('PROVISION_rabbit_host')
 RABBITMQ_PORT = 5672
 RABBITMQ_VHOST = '/'
 RABBITMQ_USER = 'capshove'
