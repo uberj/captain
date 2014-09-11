@@ -1,5 +1,6 @@
 #!/bin/bash
 
-project_path=$(dirname $(cwd))/../
+project_path=$(dirname $0)/../
+
 source /etc/environment
 $project_path/manage.py monitor_shove_logs
