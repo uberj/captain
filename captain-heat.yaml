@@ -192,6 +192,50 @@ resources:
       floating_network_id: { get_param: public_net_id }
       port_id: { get_resource: web_port }
 
+  shove_config:
+    type: OS::Heat::SoftwareConfig
+    properties:
+      group: puppet
+      inputs:
+      - name: rabbit_host
+      - name: rabbit_user
+      - name: rabbit_password
+      - name: rabbit_vhost
+      - name: project_path
+      outputs:
+      - name: result
+      config: |
+        class { 'captainshove::shove':
+          rabbit_host  => $::rabbit_host,
+          rabbit_user  => $::rabbit_user,
+          rabbit_pass  => $::rabbit_password,
+          rabbit_vhost => $::rabbit_vhost,
+          project_path => $::project_path,
+          project_name => 'captain'
+        }
+
+  # Deploy the apache configuration onto the web_server instance resource
+  shove_deployment:
+    type: OS::Heat::SoftwareDeployment
+    depends_on: 
+      - db_server
+    properties:
+      config:
+        get_resource: shove_config
+      server:
+        get_resource: web_server
+      input_values:
+        rabbit_host:
+          get_attr: [db_server, first_address]
+        rabbit_user:
+          get_attr: [app_config_deployment, rabbit_user]
+        rabbit_password:
+          get_attr: [app_config_deployment, rabbit_password]
+        rabbit_vhost:
+          get_attr: [app_config_deployment, rabbit_vhost]
+        project_path:
+          get_attr: [app_config_deployment, apache_install_root]
+
   apache_config:
     type: OS::Heat::SoftwareConfig
     properties:
@@ -205,7 +249,7 @@ resources:
       - name: result
       config: |
         class {'m::apache::python_vhost':
-          vhost_name    => $::vhost_name,
+          vhost_name   => $::vhost_name,
           install_root => $::install_root,
           wsgi_path    => $::wsgi_path,
           static_root  => $::static_root,
@@ -272,7 +316,7 @@ resources:
             }
           }
 
-        rabbitmq_vhost { $::vhost_name:
+        rabbitmq_vhost { "$::vhost_name":
           ensure  => present,
           require => Class['rabbitmq'],
         }
@@ -280,6 +324,13 @@ resources:
         rabbitmq_user { $::user:
           admin    => false,
           password => $::password,
+          require => Class['rabbitmq'],
+        }
+
+        rabbitmq_user_permissions { "$::user@/":
+          configure_permission => '.*',
+          read_permission      => '.*',
+          write_permission     => '.*',
         }
 
 
@@ -293,7 +344,7 @@ resources:
         get_resource: db_server
       input_values:
         vhost_name:
-          get_attr: [app_config_deployment, rabbit_vhost_name]
+          get_attr: [app_config_deployment, rabbit_vhost]
         user:
           get_attr: [app_config_deployment, rabbit_user]
         password:
@@ -318,7 +369,7 @@ resources:
         - name: apache_static_root
 
         # rabbit specific data
-        - name: rabbit_vhost_name
+        - name: rabbit_vhost
         - name: rabbit_user
         - name: rabbit_password
 
@@ -342,7 +393,7 @@ resources:
         - name: apache_static_root
 
         # rabbit specific data
-        - name: rabbit_vhost_name
+        - name: rabbit_vhost
         - name: rabbit_user
         - name: rabbit_password
 
@@ -373,6 +424,10 @@ resources:
         stash_config apache_wsgi_path
         stash_config apache_static_root
 
+        stash_config rabbit_vhost
+        stash_config rabbit_user
+        stash_config rabbit_password
+
         stash_config app_install_dir
         stash_config app_git_url
         stash_config app_install_script
@@ -400,8 +455,8 @@ resources:
         apache_wsgi_path: /var/www/captain/captain/wsgi.py
         apache_static_root: /var/www/captain/static/
 
-        rabbit_vhost_name: captain
-        rabbit_user: user
+        rabbit_vhost: /
+        rabbit_user: shove
         rabbit_password: a-very-bad-password
 
         app_install_dir: /var/www/captain

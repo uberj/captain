@@ -29,6 +29,8 @@ RABBITMQ_VHOST = '/'
 RABBITMQ_USER = 'capshove'
 RABBITMQ_PASS = 'capshove'
 
+HEARTBEAT_INACTIVE_DELAY = 7 * 60  # Seconds
+
 # Captain-specific queue settings.
 LOGGING_QUEUE = 'captain_logger'
 
