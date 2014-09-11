@@ -27,7 +27,7 @@ RABBITMQ_HOST = os.getenv('PROVISION_rabbit_host')
 RABBITMQ_PORT = 5672
 RABBITMQ_VHOST = '/'
 RABBITMQ_USER = os.getenv('PROVISION_rabbit_user')
-RABBITMQ_PASSWORD = os.getenv('PROVISION_rabbit_password')
+RABBITMQ_PASS = os.getenv('PROVISION_rabbit_password')
 
 HEARTBEAT_INACTIVE_DELAY = 7 * 60  # Seconds
 
