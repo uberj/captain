@@ -8,7 +8,7 @@ import os
 SECRET_KEY =  os.getenv('PROVISION_app_secret_key')
 
 # Replace with site protocol, domain, and (optionally) port.
-SITE_URL = 'http://localhost:8000'
+SITE_URL = "http://{0}".format(os.getenv('PROVISION_site_address'))
 
 # This uses sqlite. If you're doing a production install, then
 # you'll want to use something like postgresql or mysql.
@@ -51,5 +51,5 @@ DEBUG = TEMPLATE_DEBUG = True
 DEV = True
 
 # Uncomment this if you are running a local dev instance without HTTPS.
-#SESSION_COOKIE_SECURE = False
-#CSRF_COOKIE_SECURE = False
+SESSION_COOKIE_SECURE = False
+CSRF_COOKIE_SECURE = False

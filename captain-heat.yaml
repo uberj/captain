@@ -380,6 +380,7 @@ resources:
         - name: app_install_script
         - name: app_db_server
         - name: app_secret_key
+        - name: app_address
       outputs:
         # db specific data
         - name: db_name
@@ -405,6 +406,7 @@ resources:
         - name: app_install_script
         - name: app_db_server
         - name: app_secret_key
+        - name: app_address
       config: |
         #!/bin/bash
         set -x
@@ -471,6 +473,9 @@ resources:
           # Get the internal address of the db
           get_attr: [db_server, first_address]
         app_secret_key: a-not-so-secret-key
+        app_address:
+          # Eventually this should be a DNS name
+          get_attr: [web_floating_ip, fixed_ip_address]
 
   app_install:
     type: OS::Heat::SoftwareConfig
@@ -541,8 +546,6 @@ resources:
           user        => 'root',
           command     => '/var/www/captain/bin/process_command_schedule',
         } 
-
-
 
 
   # Install the application on the web_server
