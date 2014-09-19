@@ -8,7 +8,7 @@ import os
 SECRET_KEY =  os.getenv('PROVISION_app_secret_key')
 
 # Replace with site protocol, domain, and (optionally) port.
-SITE_URL = "http://{0}".format(os.getenv('PROVISION_site_address'))
+SITE_URL = "http://{0}".format(os.getenv('PROVISION_app_address'))
 
 # This uses sqlite. If you're doing a production install, then
 # you'll want to use something like postgresql or mysql.
@@ -18,7 +18,7 @@ DATABASES = {
         'NAME': os.getenv('PROVISION_db_name'),
         'USER': os.getenv('PROVISION_db_username'),
         'PASSWORD': os.getenv('PROVISION_db_password'),
-        'HOST': os.getenv('PROVISION_app_db_server'),
+        'HOST': os.getenv('PROVISION_db_address'),
     }
 }
 
