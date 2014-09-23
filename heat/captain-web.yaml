@@ -1,0 +1,466 @@
+heat_template_version: 2013-05-23
+parameters:
+  key_name:
+    type: string
+  flavor:
+    type: string
+  image:
+    type: string
+
+  public_net_id:
+    type: string
+  private_net:
+    type: string
+  private_subnet_id:
+    type: string
+
+  secgroup:
+    type: string
+
+  apache_vhost_name:
+    type: string
+    default: captain
+  apache_install_root:
+    type: string
+    default: /var/www/captain
+  apache_wsgi_path:
+    type: string
+    default: /var/www/captain/captain/wsgi.py
+  apache_static_root:
+    type: string
+    default: /var/www/captain/static/
+
+  app_install_dir:
+    type: string
+    default: /var/www/captain
+  app_git_url:
+    type: string
+    default: https://github.com/uberj/captain.git
+  app_install_script:
+    type: string
+    default: install.sh
+  app_secret_key:
+    type: string
+    default: a-not-so-secret-key
+  app_address:
+    type: string
+
+  db_address:
+    type: string
+  db_root_password:
+    type: string
+  db_name:
+    type: string
+  db_username:
+    type: string
+  db_password:
+    type: string
+
+  rabbit_vhost:
+    type: string
+  rabbit_username:
+    type: string
+  rabbit_user_password:
+    type: string
+  rabbit_host:
+    type: string
+
+  pool_id:
+    type: string
+    description: Pool to contact
+
+resources:
+  web_server:
+    type: OS::Nova::Server
+    properties:
+      image: {get_param: image}
+      flavor: {get_param: flavor}
+      key_name: {get_param: key_name}
+      user_data_format: SOFTWARE_CONFIG
+      networks:
+        - port: { get_resource: web_port }
+
+  member:
+    type: OS::Neutron::PoolMember
+    properties:
+      pool_id: {get_param: pool_id}
+      address: {get_attr: [web_server, first_address]}
+      protocol_port: 80
+
+
+  # Create a port fot the instance
+  web_port:
+    type: OS::Neutron::Port
+    properties:
+      network_id:
+        get_param: private_net
+      fixed_ips:
+        - subnet_id: { get_param: private_subnet_id }
+      security_groups:
+        - { get_param: secgroup }
+
+  # Give the instance external connectivity
+  #web_floating_ip:
+  #  type: OS::Neutron::FloatingIP
+  #  depends_on: [ web_server ]
+  #  properties:
+  #    floating_network_id: { get_param: public_net_id }
+  #    port_id: { get_resource: web_port }
+
+  shove_config:
+    type: OS::Heat::SoftwareConfig
+    properties:
+      group: puppet
+      inputs:
+      - name: rabbit_host
+      - name: rabbit_username
+      - name: rabbit_user_password
+      - name: rabbit_vhost
+      - name: project_path
+      outputs:
+      - name: result
+      config: |
+        class { 'captainshove::shove':
+          rabbit_host  => $::rabbit_host,
+          rabbit_user  => $::rabbit_username,
+          rabbit_pass  => $::rabbit_user_password,
+          rabbit_vhost => $::rabbit_vhost,
+          project_path => $::project_path,
+          project_name => 'captain'
+        }
+
+  # Deploy the apache configuration onto the web_server instance resource
+  shove_deployment:
+    type: OS::Heat::SoftwareDeployment
+    #depends_on: 
+    #  - {get_param: db_server}
+    properties:
+      config:
+        get_resource: shove_config
+      server:
+        get_resource: web_server
+      input_values:
+        rabbit_host:
+          get_param: rabbit_host
+        rabbit_username:
+          get_param: rabbit_username
+        rabbit_user_password:
+          get_param: rabbit_user_password
+        rabbit_vhost:
+          get_param: rabbit_vhost
+        project_path:
+          get_param: apache_install_root
+
+  apache_config:
+    type: OS::Heat::SoftwareConfig
+    properties:
+      group: puppet
+      inputs:
+      - name: vhost_name
+      - name: install_root
+      - name: wsgi_path
+      - name: static_root
+      outputs:
+      - name: result
+      config: |
+        class {'m::apache::python_vhost':
+          vhost_name   => $::vhost_name,
+          install_root => $::install_root,
+          wsgi_path    => $::wsgi_path,
+          static_root  => $::static_root,
+        }
+
+  # Deploy the apache configuration onto the web_server instance resource
+  apache_deployment:
+    type: OS::Heat::SoftwareDeployment
+    properties:
+      config:
+        get_resource: apache_config
+      server:
+        get_resource: web_server
+      input_values:
+        vhost_name:
+          get_param: apache_vhost_name
+        install_root:
+          get_param: apache_install_root
+        wsgi_path:
+          get_param: apache_wsgi_path
+        static_root:
+          get_param: apache_static_root
+
+  # A SoftwareConfig for installing mysql client bindings
+  mysql_client_config:
+    type: OS::Heat::SoftwareConfig
+    properties:
+      group: puppet
+      outputs:
+      - name: result
+      config: |
+        include ::m::mysql::python_client
+
+  # Installing (or deploying) the mysql_client_config onto the defined web_server instance resource.
+  mysql_client_deployment:
+    type: OS::Heat::SoftwareDeployment
+    properties:
+      config:
+        get_resource: mysql_client_config
+      server:
+        get_resource: web_server
+
+  # Define the app config
+  app_config:
+    type: OS::Heat::SoftwareConfig
+    properties:
+      group: script
+      inputs:
+        # db specific data
+        - name: db_name
+        - name: db_root_password
+        - name: db_username
+        - name: db_password
+        - name: db_address
+
+        # apache specific data
+        - name: apache_vhost_name
+        - name: apache_install_root
+        - name: apache_wsgi_path
+        - name: apache_static_root
+
+        # rabbit specific data
+        - name: rabbit_vhost
+        - name: rabbit_username
+        - name: rabbit_user_password
+        - name: rabbit_host
+
+        # app installation data
+        - name: app_install_dir
+        - name: app_git_url
+        - name: app_install_script
+        - name: app_secret_key
+        - name: app_address
+      outputs:
+        # db specific data
+        - name: db_name
+        - name: db_root_password
+        - name: db_username
+        - name: db_password
+        - name: db_address
+
+        # apache specific data
+        - name: apache_vhost_name
+        - name: apache_install_root
+        - name: apache_wsgi_path
+        - name: apache_static_root
+
+        # rabbit specific data
+        - name: rabbit_vhost
+        - name: rabbit_username
+        - name: rabbit_user_password
+        - name: rabbit_host
+
+        # app installation data
+        - name: app_install_dir
+        - name: app_git_url
+        - name: app_install_script
+        - name: app_secret_key
+        - name: app_address
+      config: |
+        #!/bin/bash
+        set -x
+        function stash_config () {
+          # TODO Put this stuff in zookeeper and query with hiera in puppet?
+          # many ways to do this
+          val=${!1}
+          echo -n $val > ${heat_outputs_path}.$1
+          echo "export PROVISION_$1=$val" >> /etc/environment
+        }
+
+        stash_config db_name
+        stash_config db_root_password
+        stash_config db_username
+        stash_config db_password
+        stash_config db_address
+
+        stash_config apache_vhost_name
+        stash_config apache_install_root
+        stash_config apache_wsgi_path
+        stash_config apache_static_root
+
+        stash_config rabbit_vhost
+        stash_config rabbit_username
+        stash_config rabbit_user_password
+        stash_config rabbit_host
+
+        stash_config app_install_dir
+        stash_config app_git_url
+        stash_config app_install_script
+        stash_config app_secret_key
+        stash_config app_address
+
+  # Deploy and place application specific data onto the apache/app webserver
+  app_config_deployment:
+    type: OS::Heat::SoftwareDeployment
+    properties:
+      config:
+        get_resource: app_config
+      server:
+        # Install the app config on the web server
+        get_resource: web_server
+      input_values:
+        # TODO Figure out a way to generate random passwords
+        db_root_password:
+          get_param: db_root_password
+        db_name:
+          get_param: db_name
+        db_username:
+          get_param: db_username
+        db_password:
+          get_param: db_password
+        db_address:
+          get_param: db_address
+
+        apache_vhost_name:
+          get_param: apache_vhost_name
+        apache_install_root:
+          get_param: apache_install_root
+        apache_wsgi_path:
+          get_param: apache_wsgi_path
+        apache_static_root:
+          get_param: apache_static_root
+
+        rabbit_vhost:
+          get_param: rabbit_vhost
+        rabbit_username:
+          get_param: rabbit_username
+        rabbit_user_password:
+          get_param: rabbit_user_password
+        rabbit_host:
+          get_param: rabbit_host
+
+        app_install_dir:
+          get_param: app_install_dir
+        app_git_url:
+          get_param: app_git_url
+        app_install_script:
+          get_param: app_install_script
+        app_secret_key:
+          get_param: app_secret_key
+        app_address:
+          # Eventually this should be the address of the load balencer
+          get_param: app_address
+
+  app_install:
+    type: OS::Heat::SoftwareConfig
+    properties:
+      group: script
+      inputs:
+      - name: install_dir
+      - name: git_url
+      - name: install_script
+      - name: branch
+        default: master
+      outputs:
+      - name: result
+      config: |
+        #!/bin/bash
+        set +x
+        mkdir -p $(dirname $install_dir)
+        if [ ! -f $install_dir/.git/index ]; then
+          git clone -b $branch $git_url $install_dir
+        fi
+        $install_dir/$install_script
+
+
+  # Install the application on the web_server
+  app_install_deployment:
+    type: OS::Heat::SoftwareDeployment
+    properties:
+      config:
+        get_resource: app_install
+      server:
+        get_resource: web_server
+      input_values:
+        install_dir:
+          get_param: app_install_dir
+        git_url:
+          get_param: app_git_url
+        install_script:
+          get_param: app_install_script
+        branch: heat
+
+  # Make sure the captain daemons are running
+  app_commands:
+    type: OS::Heat::SoftwareConfig
+    properties:
+      group: puppet
+      outputs:
+        - name: result
+      config: |
+        #/var/www/captain/bin/monitor_shove_instances
+        class { 'supervisord':}
+
+        supervisord::program { 'monitor_shove_instances':
+          command     => '/var/www/captain/bin/monitor_shove_instances',
+          autostart   => true,
+        }
+
+        supervisord::program { 'monitor_shove_logs':
+          command     => '/var/www/captain/bin/monitor_shove_logs',
+          autostart   => true,
+        }
+
+        cron::job{ 'process_command_schedule':
+          minute      => '5/*',
+          hour        => '*',
+          date        => '*',
+          month       => '*',
+          weekday     => '*',
+          user        => 'root',
+          command     => '/var/www/captain/bin/process_command_schedule',
+        } 
+
+
+  # Install the application on the web_server
+  app_commands_deployment:
+    type: OS::Heat::SoftwareDeployment
+    depends_on: [ app_install_deployment ]
+    properties:
+      config:
+        get_resource: app_commands
+      server:
+        get_resource: web_server
+
+#outputs:
+# # Web output
+# web_server:
+#   value:
+#     get_resource: web_server
+
+# web_stdout:
+#   value:
+#     get_attr: [apache_deployment, deploy_stdout]
+# web_result:
+#   value:
+#     get_attr: [apache_deployment, result]
+# web_stderr:
+#   value:
+#     get_attr: [apache_deployment, deploy_stderr]
+# web_status_code:
+#   value:
+#     get_attr: [apache_deployment, deploy_status_code]
+
+# # Application output
+# app_stdout:
+#   value:
+#     get_attr: [app_install_deployment, deploy_stdout]
+# app_stderr:
+#   value:
+#     get_attr: [app_install_deployment, deploy_stderr]
+
+# # MySQL client output
+# mysql_client_app_stdout:
+#   value:
+#     get_attr: [mysql_client_deployment, deploy_stdout]
+# mysql_client_app_stderr:
+#   value:
+#     get_attr: [mysql_client_deployment, deploy_stderr]

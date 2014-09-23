@@ -1,0 +1,357 @@
+heat_template_version: 2013-05-23
+parameters:
+  key_name:
+    type: string
+  flavor:
+    type: string
+    default: m1.medium
+  image:
+    type: string
+    default: ubuntu-trusty.amd64-0.10.0.2014082628
+
+  # Network parameters. These should all have sane defaults
+  public_net_id:
+    type: string
+    default: public
+    description: >
+      ID of public network for which floating IP addresses will be allocated
+  private_net_name:
+    type: string
+    default: private
+    description: Name of private network to be created
+  private_net_cidr:
+    type: string
+    default: 10.1.0.0/24
+    description: Private network address (CIDR notation)
+  private_net_gateway:
+    type: string
+    default: 10.1.0.1
+    description: Private network gateway address
+  private_net_pool_start:
+    type: string
+    default: 10.1.0.10
+    description: Start of private network IP address allocation pool
+  private_net_pool_end:
+    type: string
+    default: 10.1.0.254
+    description: End of private network IP address allocation pool
+
+
+  # App specific data
+  rabbit_vhost:
+    type: string
+    default: /
+  rabbit_username:
+    type: string
+    default: shove
+  rabbit_user_password:
+    type: string
+    default: a-very-bad-password
+
+  apache_vhost_name:
+    type: string
+    default: captain
+  apache_install_root:
+    type: string
+    default: /var/www/captain
+  apache_wsgi_path:
+    type: string
+    default: /var/www/captain/captain/wsgi.py
+  apache_static_root:
+    type: string
+    default: /var/www/captain/static/
+
+  db_root_password:
+    type: string
+    default: use-OS::Heat::RandomString
+  db_name:
+    type: string
+    default: captain
+  db_username:
+    type: string
+    default: captain
+  db_password:
+    type: string
+    default: use-OS::Heat::RandomString
+
+  app_install_dir:
+    type: string
+    default: /var/www/captain
+  app_git_url:
+    type: string
+    default: https://github.com/uberj/captain.git
+  app_install_script:
+    type: string
+    default: install.sh
+  app_secret_key:
+    type: string
+    default: a-not-so-secret-key
+
+resources:
+  secgroup:
+    type: OS::Neutron::SecurityGroup
+    properties:
+      description: Enable traffic external traffic on SSH.
+      rules: [
+        {protocol: tcp, port_range_max: 22, port_range_min: 22},
+        {protocol: tcp, port_range_max: 65535, port_range_min: 1, remote_mode: remote_group_id},
+        {protocol: tcp, port_range_max: 80, port_range_min: 80},
+        {protocol: icmp}
+      ]
+
+  private_net:
+    type: OS::Neutron::Net
+    properties:
+      name: { get_param: private_net_name }
+
+  private_subnet:
+    type: OS::Neutron::Subnet
+    properties:
+      network_id: { get_resource: private_net }
+      cidr: { get_param: private_net_cidr }
+      gateway_ip: { get_param: private_net_gateway }
+      allocation_pools:
+        - start: { get_param: private_net_pool_start }
+          end: { get_param: private_net_pool_end }
+      dns_nameservers:
+        - 8.8.8.8
+
+  router:
+    type: OS::Neutron::Router
+    properties:
+      external_gateway_info:
+        network: { get_param: public_net_id }
+
+  router_interface:
+    type: OS::Neutron::RouterInterface
+    properties:
+      router_id: { get_resource: router }
+      subnet_id: { get_resource: private_subnet }
+
+  db_server:
+    type: OS::Nova::Server
+    properties:
+      image: {get_param: image}
+      flavor: {get_param: flavor}
+      key_name: {get_param: key_name}
+      user_data_format: SOFTWARE_CONFIG
+      networks:
+        - port: { get_resource: db_port }
+
+  db_port:
+    type: OS::Neutron::Port
+    properties:
+      network_id: { get_resource: private_net }
+      fixed_ips:
+        - subnet_id: { get_resource: private_subnet }
+      security_groups:
+        - { get_resource: secgroup }
+
+  mysql_server_config:
+    type: OS::Heat::SoftwareConfig
+    properties:
+      group: puppet
+      inputs:
+      - name: db_name
+      - name: root_password
+      - name: username
+      - name: password
+      - name: allowed_hosts
+        default: '10.1.0.%'
+      outputs:
+      - name: result
+      config: |
+        class { 'm::mysql::allinone':
+          root_password     => $::root_password,
+          db_name           => $::db_name,
+          user              => $::username,
+          password          => $::password,
+          allowed_hosts     => $::allowed_hosts,
+        }
+
+  mysql_server_deployment:
+    type: OS::Heat::SoftwareDeployment
+    properties:
+      config:
+        get_resource: mysql_server_config
+      server:
+        get_resource: db_server
+      input_values:
+        db_name:
+          get_param: db_name
+        root_password:
+          get_param: db_root_password
+        username:
+          get_param: db_username
+        password:
+          get_param: db_password
+
+
+  rabbit_config:
+    type: OS::Heat::SoftwareConfig
+    properties:
+      group: puppet
+      inputs:
+      - name: vhost_name
+      - name: username
+      - name: user_password
+      outputs:
+      - name: result
+      config: |
+        class {'rabbitmq':
+            port             => 5672,
+            package_provider => 'apt',
+            admin_enable     => true,
+            manage_repos     => false,
+            environment_variables   => {
+              # The NODENAME *must* be rabbit
+              # See http://serverfault.com/questions/562911/trying-to-install-rabbitmq-with-puppet/573909#573909
+              'RABBITMQ_NODENAME'     => 'rabbit',
+              'RABBITMQ_SERVICENAME'  => 'RabbitMQ'
+            }
+          }
+
+        rabbitmq_vhost { "$::vhost_name":
+          ensure  => present,
+          require => Class['rabbitmq'],
+        }
+
+        rabbitmq_user { $::username:
+          admin    => false,
+          password => $::user_password,
+          require => Class['rabbitmq'],
+        }
+
+        rabbitmq_user_permissions { "$::username@/":
+          configure_permission => '.*',
+          read_permission      => '.*',
+          write_permission     => '.*',
+        }
+
+
+  # Deploy the apache configuration onto the web_server instance resource
+  rabbit_deployment:
+    type: OS::Heat::SoftwareDeployment
+    properties:
+      config:
+        get_resource: rabbit_config
+      server:
+        get_resource: db_server
+      input_values:
+        vhost:
+          get_param: rabbit_vhost
+        username:
+          get_param: rabbit_username
+        user_password:
+          get_param: rabbit_user_password
+
+  web_pool:
+    type: OS::Neutron::Pool
+    properties:
+      protocol: HTTP
+      #monitors: [{get_resource: monitor}]
+      subnet_id:
+        get_resource: private_subnet
+      lb_method: ROUND_ROBIN
+      vip:
+        protocol_port: 80
+
+  load_balancer_floating_ip:
+    type: OS::Neutron::FloatingIP
+    properties:
+      floating_network_id: { get_param: public_net_id }
+      port_id: {get_attr: [web_pool, vip, port_id]}
+
+  load_balancer:
+    type: OS::Neutron::LoadBalancer
+    properties:
+      protocol_port: 80
+      pool_id: {get_resource: web_pool}
+
+
+  captain_app_servers:
+    type: OS::Heat::ResourceGroup
+    properties:
+      count: 5
+      resource_def: 
+        type: Captain::AppServer
+        properties:
+          key_name:
+            get_param: key_name
+          image:
+            get_param: image
+          flavor:
+            get_param: flavor
+
+          secgroup:
+            get_resource: secgroup
+
+          pool_id:
+            get_resource: web_pool
+
+          public_net_id:
+            get_param: public_net_id
+          private_net:
+            get_resource: private_net
+          private_subnet_id:
+            get_resource: private_subnet
+
+          rabbit_host:
+            get_attr: [db_server, first_address]
+          rabbit_vhost:
+            get_param: rabbit_vhost
+          rabbit_username:
+            get_param: rabbit_username
+          rabbit_user_password:
+            get_param: rabbit_user_password
+
+          db_root_password:
+            get_param: db_root_password
+          db_name:
+            get_param: db_name
+          db_username:
+            get_param: db_username
+          db_password:
+            get_param: db_password
+          db_address: 
+            get_attr: [db_server, first_address]
+
+          apache_vhost_name:
+            get_param: apache_vhost_name
+          apache_install_root:
+            get_param: apache_install_root
+          apache_wsgi_path:
+            get_param: apache_wsgi_path
+          apache_static_root:
+            get_param: apache_static_root
+
+          app_install_dir:
+            get_param: app_install_dir
+          app_git_url:
+            get_param: app_git_url
+          app_install_script:
+            get_param: app_install_script
+          app_secret_key:
+            get_param: app_secret_key
+          app_address:
+            get_attr: [load_balancer_floating_ip, floating_ip_address]
+
+outputs:
+  result:
+    value:
+      get_attr: [mysql_server_deployment, result]
+  # DB output
+  db_stdout:
+    value:
+      get_attr: [mysql_server_deployment, deploy_stdout]
+  db_stderr:
+    value:
+      get_attr: [mysql_server_deployment, deploy_stderr]
+  db_status_code:
+    value:
+      get_attr: [mysql_server_deployment, deploy_status_code]
+
+  site_address:
+    value: {get_attr: [load_balancer_floating_ip, floating_ip_address]}
+    description: Load balenced ip address
+
