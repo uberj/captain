@@ -30,6 +30,11 @@ parameters:
     type: string
     default: /var/www/captain/static/
 
+  nfs_share_path:
+    type: string
+  nfs_server_address:
+    type: string
+
   app_install_dir:
     type: string
     default: /var/www/captain
@@ -206,6 +211,35 @@ resources:
         get_resource: mysql_client_config
       server:
         get_resource: web_server
+
+  nfs_client_config:
+    type: OS::Heat::SoftwareConfig
+    properties:
+      group: puppet
+      inputs:
+      - name: share_path
+      - name: nfs_server
+      outputs:
+      - name: result
+      config: |
+        class {'m::nfs::single_mounted_share':
+          share_path   => $::share_path,
+          nfs_server   => $::nfs_server,
+        }
+
+  # Deploy the nfs configuration onto the web_server instance resource
+  nfs_client_deployment:
+    type: OS::Heat::SoftwareDeployment
+    properties:
+      config:
+        get_resource: nfs_client_config
+      server:
+        get_resource: web_server
+      input_values:
+        share_path:
+          get_param: nfs_share_path
+        nfs_server:
+          get_param: nfs_server_address
 
   # Define the app config
   app_config:

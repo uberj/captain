@@ -61,6 +61,9 @@ parameters:
     type: string
     default: /var/www/captain/static/
 
+  nfs_share_path:
+    type: /srv/captain
+
   db_root_password:
     type: string
     default: use-OS::Heat::RandomString
@@ -186,6 +189,30 @@ resources:
         password:
           get_param: db_password
 
+  nfs_server_config:
+    type: OS::Heat::SoftwareConfig
+    properties:
+      group: puppet
+      inputs:
+      - name: share_path
+      outputs:
+      - name: result
+      config: |
+        class { 'm::nfs::single_exported_share':
+          root_password     => $::share_path
+        }
+
+  nfs_server_deployment:
+    type: OS::Heat::SoftwareDeployment
+    properties:
+      config:
+        get_resource: nfs_server_config
+      server:
+        get_resource: db_server
+      input_values:
+        share_path:
+          get_param: nfs_share_path
+
 
   rabbit_config:
     type: OS::Heat::SoftwareConfig
@@ -271,6 +298,9 @@ resources:
 
   captain_app_servers:
     type: OS::Heat::ResourceGroup
+    depends_on: 
+      - rabbit_deployment
+      - mysql_server_deployment
     properties:
       count: 5
       resource_def: 
@@ -324,6 +354,11 @@ resources:
             get_param: apache_wsgi_path
           apache_static_root:
             get_param: apache_static_root
+
+          nfs_share_path:
+            get_param: nfs_share_path
+          nfs_server_address:
+            get_attr: [db_server, first_address]
 
           app_install_dir:
             get_param: app_install_dir

@@ -1,2 +1,2 @@
 resource_registry:
-  Captain::AppServer: captain.yaml
+  Captain::AppServer: captain-web.yaml
