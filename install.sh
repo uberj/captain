@@ -12,7 +12,12 @@ pushd $SCRIPT_DIR
     cp captain/settings/local.py-heat captain/settings/local.py
     source /etc/environment
     echo 'yes' | python manage.py collectstatic
-    echo 'no' | python manage.py syncdb --migrate
+    echo 'CREATE TABLE create_lock(l int);' | python manage.py dbshell
+    if [ $? -eq 0 ]; then
+        echo "Creating tables"
+        echo 'no' | python manage.py syncdb --migrate
+    fi
+    echo "Tables already created"
 popd
 
 service apache2 restart
