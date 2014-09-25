@@ -62,7 +62,11 @@ parameters:
     default: /var/www/captain/static/
 
   nfs_share_path:
-    type: /srv/captain
+    type: string
+    default: /srv/captain
+  nfs_mount_path:
+    type: string
+    default: /var/www/captain/media/
 
   db_root_password:
     type: string
@@ -199,7 +203,7 @@ resources:
       - name: result
       config: |
         class { 'm::nfs::single_exported_share':
-          root_password     => $::share_path
+          share_path     => $::share_path
         }
 
   nfs_server_deployment:
@@ -302,7 +306,7 @@ resources:
       - rabbit_deployment
       - mysql_server_deployment
     properties:
-      count: 5
+      count: 2
       resource_def: 
         type: Captain::AppServer
         properties:
@@ -357,6 +361,8 @@ resources:
 
           nfs_share_path:
             get_param: nfs_share_path
+          nfs_mount_path:
+            get_param: nfs_mount_path
           nfs_server_address:
             get_attr: [db_server, first_address]
 
