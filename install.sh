@@ -16,8 +16,19 @@ pushd $SCRIPT_DIR
     if [ $? -eq 0 ]; then
         echo "Creating tables" > /tmp/foo
         echo 'no' | python manage.py syncdb --migrate
+        echo 'DROP TABLE create_lock;' | python manage.py dbshell
+    else
+        # We need to wait for the machine that is creating the tables to finish their job
+        while 1; do
+            sleep $[ ( $RANDOM % 10 )  + 1 ]s
+            echo "Tables already created"
+            echo "SELECT count(1) FROM create_lock;" | python manage.py dbshell
+            if [ $? -eq 1 ]; then
+                # Looks like the table doesn't exist anymore. Cary on.
+                break
+            fi
+        done
     fi
-    echo "Tables already created"
 popd
 
 service apache2 restart
