@@ -19,9 +19,11 @@ pushd $SCRIPT_DIR
         echo 'DROP TABLE create_lock;' | python manage.py dbshell
     else
         # We need to wait for the machine that is creating the tables to finish their job
-        while 1; do
-            sleep $[ ( $RANDOM % 10 )  + 1 ]s
-            echo "Tables already created"
+        while [[ 1 ]]; do
+           wait_time=$[ ( $RANDOM % 10 )  + 1 ]s
+            echo "Waiting $wait_time seconds..."
+            sleep $wait_time
+
             echo "SELECT count(1) FROM create_lock;" | python manage.py dbshell
             if [ $? -eq 1 ]; then
                 # Looks like the table doesn't exist anymore. Cary on.
