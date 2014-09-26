@@ -9,6 +9,7 @@ fi
 
 SCRIPT_DIR=$(dirname $0)
 pushd $SCRIPT_DIR
+    set -x
     cp captain/settings/local.py-heat captain/settings/local.py
     source /etc/environment
     echo 'yes' | python manage.py collectstatic
