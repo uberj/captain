@@ -15,7 +15,7 @@ pushd $SCRIPT_DIR
     echo 'yes' | python manage.py collectstatic
     echo 'CREATE TABLE create_lock(l int);' | python manage.py dbshell
     if [ $? -eq 0 ]; then
-        echo "Creating tables" > /tmp/foo
+        echo "Creating tables" > /tmp/i_am_master
         echo 'no' | python manage.py syncdb --migrate
         echo 'DROP TABLE create_lock;' | python manage.py dbshell
     else
