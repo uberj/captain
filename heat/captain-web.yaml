@@ -408,10 +408,7 @@ resources:
         if [ ! -f $install_dir/.git/index ]; then
           git clone -b $branch $git_url $install_dir
         fi
-        supervisorctl status >> /tmp/supstatus
-        echo `date` > /tmp/install.log
-        $install_dir/$install_script >> /tmp/install.log
-        cat /tmp/install.log
+        $install_dir/$install_script 2>&1 > /tmp/install.log
         exit 0
 
 
@@ -475,7 +472,7 @@ resources:
       server:
         get_resource: web_server
 
-#outputs:
+outputs:
 # # Web output
 # web_server:
 #   value:

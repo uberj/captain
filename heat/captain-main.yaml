@@ -392,6 +392,13 @@ outputs:
     value:
       get_attr: [mysql_server_deployment, deploy_status_code]
 
+  app_output:
+    value:
+      get_attr: [captain_app_servers, app_stdout]
+  app_output_err:
+    value:
+      get_attr: [captain_app_servers, app_stderr]
+
   site_address:
     value: {get_attr: [load_balancer_floating_ip, floating_ip_address]}
     description: Load balenced ip address
