@@ -17,9 +17,10 @@ pushd $SCRIPT_DIR
     echo "`date` Collecting static configs"
     echo 'yes' | python manage.py collectstatic
     echo "`date` Attempting to create table lock"
-    create_lock=$(echo 'CREATE TABLE create_lock(l int);' | python manage.py dbshell)
+    create_lock=$(echo 'CREATE TABLE create_lock(l int);' | python manage.py dbshell 2>&1)
+    ret=$?
     echo "`date` attempted to create lock: $create_lock"
-    if [ $? -eq 0 ]; then
+    if [ $ret -eq 0 ]; then
         echo "`date` Lock created"
         echo "Creating tables" > /tmp/i_am_master
         echo 'no' | python manage.py syncdb --migrate
