@@ -1,2 +1,2 @@
 push_application: python bin/update/update.py
-git-pull: git pull
+git_pull: git pull
